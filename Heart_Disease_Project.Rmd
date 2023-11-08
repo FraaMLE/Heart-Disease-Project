@@ -1,0 +1,1520 @@
+---
+title: "Advancing Heart Health: A Data-Driven Approach to Predicting Heart Disease"
+author: "Francesco Gabriele, Mattia Piazza, Thomas Rosso"
+date: "2023-07-22"
+output:
+  pdf_document: default
+  word_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE, fig.align = 'center')
+```
+
+```{r echo=TRUE, include=FALSE}
+# libraries used
+set.seed(123)
+library(mice)
+library(corrplot)
+library(correlation)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(car)
+library(tibble)
+library(dplyr)
+library(MASS)
+library(glmnet)
+library(ggplotify)
+library(mda)
+library(pROC)
+library(qdap)
+library(e1071)  
+library(caret)
+library(naivebayes)
+library(xtable)
+library(kableExtra)
+```
+
+# Aim of this project
+
+This project was born due to the aim of developing a valuable and impactful solution that could potentially help people in the context of heart disease. 
+Heart disease remains a leading cause of death globally, affecting millions of lives each year. Early detection and timely intervention are crucial in mitigating its impact and improving patient outcomes. By harnessing data-driven insights and leveraging statistical learning models, we endeavor to build a predictive tool that supports healthcare professionals in making informed decisions and enables early diagnosis of heart-related conditions.
+
+# Description of the DataSet
+
+This dataset is available on Kaggle (https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction) and is the result of combining 5 different heart datasets, each with 11 common features, that were already available independently. 
+The five datasets used are:
+
+-   Cleveland: 303 observations
+-   Hungarian: 294 observations
+-   Switzerland: 123 observations
+-   Long Beach VA: 200 observations
+-   Stalog (Heart) Data Set: 270 observations
+
+Total: 1190 observations
+Duplicated: 272 observations
+Final dataset: 918 observations
+Every dataset used is it available under the index of heart disease datasets from UNI Machine Learning Repository.
+The proposed DataSet consists in 918 observation and 11 features.
+The goal of this project is to classify, as effectively as possible, whether a patient presents Angina using the 11 considered features.
+
+```{r, results='asis'}
+data = read.csv("heart.csv")
+options(xtable.comment = FALSE)
+```
+
+```{r echo=FALSE}
+kable(head(data), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("scale_down","HOLD_position"))
+```
+
+## Variables Descriptions
+
+### ChestPainType:
+
+Angina, also known as "Angina Pectoris," is a type of chest pain caused by reduced blood flow to the heart. Angina typically manifests as a feeling of pressure, tightness, squeezing, or heaviness in the chest. The pain or discomfort may also radiate to the arms (usually the left arm), shoulders, neck, jaw, or back. Some individuals may describe it as a burning sensation in the chest. Chest pains like those of angina often occur when there is a high demand for oxygen that is not met, such as during physical exertion, emotional stress, exposure to cold temperatures, or after a heavy meal.
+
+This categorical variable classifies the presence of Angina into these values:
+
+"ATA": Atypical angina - Refers to chest pain that does not resemble typical angina.
+"NAP": Non-Angina Pain - Refers to chest pain that is unrelated to reduced blood flow to the heart, for example, muscle strains, respiratory issues, gastrointestinal problems, or anxiety.
+"ASY": Asymptomatic - Refers to the absence of symptoms of angina.
+"TA": Typical Angina - Refers to chest pain that perfectly matches the typical symptoms of angina.
+
+### Resting Blood Pressure (RestingBP):
+
+Blood pressure is the force exerted by the blood against the walls of the arteries as it circulates through the body and it is commonly measured in millimeters of mercury (mmHg). Its measurement is renderered as pair of values: systolic blood pressure (the higher value) and diastolic blood pressure (the lower value).
+The common levels of RestingBP (resting blood pressure) are generally classified into the following categories:
+
+Normal blood pressure:
+
+Systolic: Less than 120 mmHg
+Diastolic: Less than 80 mmHg
+
+Elevated blood pressure (hypertension):
+
+Stage 1 hypertension:
+Systolic: 130-139 mmHg
+Diastolic: 80-89 mmHg
+
+Stage 2 hypertension:
+Systolic: 140 mmHg or higher
+Diastolic: 90 mmHg or higher.
+
+### Cholesterol:
+
+Cholesterol is a waxy substance found in the body and is necessary for the production of hormones, vitamin D, and certain compounds that aid in digestion. However, high levels of cholesterol, particularly low-density lipoprotein (LDL) cholesterol, are associated with an increased risk of heart disease. Cholesterol levels are typically measured in milligrams per deciliter (mg/dL) of blood.
+
+The typical levels of cholesterol are often classified into different categories based on guidelines provided by health organizations. Here are the general guidelines for cholesterol levels in mg/dL:
+
+Total Cholesterol:
+
+Desirable: Less than 200 mg/dL
+Borderline high: 200-239 mg/dL
+High: 240 mg/dL or higher
+LDL Cholesterol (Bad Cholesterol):
+
+Optimal: Less than 100 mg/dL
+Near optimal/above optimal: 100-129 mg/dL
+Borderline high: 130-159 mg/dL
+High: 160-189 mg/dL
+Very high: 190 mg/dL or higher
+HDL Cholesterol (Good Cholesterol):
+
+Low: Less than 40 mg/dL (for men), less than 50 mg/dL (for women)
+Desirable: 40 mg/dL or higher (for men), 50 mg/dL or higher (for women).
+
+In this analysis the total cholesterol is taken underconsideration.
+
+### Fasting Blood Sugar (FastingBS):
+
+It refers to the fasting blood sugar level of individuals. Fasting blood sugar, also known as fasting glucose, is the measurement of glucose (sugar) concentration in the blood after a period of fasting, typically overnight.
+This measurement is treated as categorical variable, more specifically a value of 1 indicates a level of sugar > 120 and a value of 0 indicates low values.
+
+### Resting Electrocardiogram (RestingECG):
+
+The resting ECG specifically captures the heart's electrical signals while the person is at rest. Observations of this variables are summerized into three possible values:
+
+·Normal (): indicates a normal or regular ECG reading without any significant abnormalities or irregularities.
+
+·ST-T Wave Abnormality (ST): it suggests deviations or abnormalities in the ST segment or T wave of the ECG, which can be indicative of various heart conditions.
+
+·Left Ventricular Hypertrophy (LVH): his category indicates an enlargement or thickening of the muscle in the left ventricle of the heart, which can be associated with conditions such as hypertension or heart disease.
+
+### Maximum Heart Rate (MaxHR):
+
+It refers to the maximum heart rate achieved by individuals during exercise.It is commonly measured in beats per minute (bpm).
+
+
+### ExerciseAngina:
+
+It refers to the presence or absence of exercise-induced angina in individuals. During exercise, the heart works harder to meet the increased demand for oxygen and nutrients. In individuals with CAD, the narrowed or blocked coronary arteries may limit the blood flow to the heart muscle, leading to inadequate oxygen supply and the development of angina symptoms. These observations are summarized in positive or negative occurrence. 
+
+### Oldpeak:
+
+Refers to the ST depression induced by exercise relative to rest. ST depression is a measurement taken from an electrocardiogram (ECG) that assesses changes in the ST segment of the waveform.
+During exercise, the heart's oxygen demand increases, and blood flow to the heart muscles also increases. In individuals with coronary artery disease (CAD) or other cardiac conditions, the blood flow may be insufficient, leading to abnormalities in the ST segment of the ECG. Generally, Oldpeak values are measured in millimeters (mm) on the electrocardiogram (ECG).
+Large positive or negative values suggest that the heart is not receiving sufficient blood flow during exercise, leading to the development of ST segment abnormalities.
+
+### ST_Slope:
+
+It refers to the slope of the ST segment on an electrocardiogram (ECG). The ST segment is the flat, isoelectric portion of the ECG waveform between the S wave and the T wave.
+The ST segment slope is categorized into three types:
+
+Upsloping (value: 1): This indicates a positive slope of the ST segment, meaning it gradually rises from the baseline towards the T wave. Upsloping ST segments are generally considered normal or non-specific.
+
+Flat (value: 2): This indicates a flat or isoelectric ST segment with no significant upward or downward slope. Flat ST segments are also considered normal or non-specific.
+
+Downsloping (value: 3): This indicates a negative slope of the ST segment, meaning it gradually descends from the baseline towards the T wave. Downsloping ST segments may suggest myocardial ischemia or other cardiac abnormalities.
+
+The meaning of Age and Sex is pretty self-explanatory. These two columns store the age and the sex of the subjects.
+
+### Heart Disease:
+
+This is the column of the response variable. Its values can be either 0 or 1. The occurrence of the former indicates that subject does not suffer from heart disease the latter instead indicates that it does.
+
+# Data Pre-Processing
+
+As it is possible to observe from the previous table, the columns have different data types, in order to conduct the analysis it is necessary to understand the different types. In the following table it is possible to see the column name with its type.
+```{r, results='asis'}
+# Extract variable names and their types
+variable_names <- names(data)
+variable_types <- sapply(data, class)
+# Create the dataframe with variable names and their types
+df_variable_types <- data.frame(VariableType = variable_types)
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(df_variable_types, format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("hold_position"))
+```
+
+
+We start by dividing numerical from categorical variables
+```{r}
+# Vectors for column names based on data type
+num_cols <- character()
+chr_cols <- character()
+
+# Loop through the columns of the dataframe
+for (colonna in names(data)) {
+  tipo <- typeof(data[[colonna]])
+  
+  # Add column name to the corresponding vector
+  if (tipo == "double" || tipo == "integer") {
+    num_cols <- c(num_cols, colonna)
+  } else if (tipo == "character") {
+    chr_cols <- c(chr_cols, colonna)
+  }
+}
+
+# Move FastingBS (fasting blood sugar) into the categorical vector
+num_cols <- subset(num_cols, num_cols != "FastingBS")
+chr_cols <- append(chr_cols, "FastingBS")
+chr_cols
+num_cols
+```
+
+## EXPLORATORY DATA ANALYSIS
+
+Before starting to fit models to the data, let's conduct some data exploration to gain insights about the dataset we will be using. This process is often referred to as Exploratory Data Analysis.
+
+### Looking for Na values
+
+As first thing to do we check whether there are Na values in the dataset
+```{r}
+# Check if each column contains any NA values
+na_check <- as.data.frame(sapply(data, anyNA))
+# Rename the column to "Has_NA_Values"
+colnames(na_check) <- "Has NA Values"
+```
+
+
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(na_check, format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("hold_position"))
+```
+Results shows there aren't any.
+
+### Summary statistics
+
+The we proceed by displaying some summary statistics of the columns.
+```{r echo=FALSE}
+#summary(data[num_cols])
+
+options(xtable.comment = FALSE)
+kable(summary(data[num_cols]), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("scale_down","hold_position"))
+```
+
+### Correlation matrix for the numerical columns 
+
+The correlation matrix provided shows the pairwise correlations between different variables in the dataset.
+```{r}
+# Calculate correlation matrix
+cor_matrix <- cor(data[num_cols])
+
+# Print the correlation matrix
+#print(cor_matrix)
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(cor_matrix, format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("scale_down","hold_position"))
+
+
+corrplot(cor_matrix, 
+  method ="number",
+  diag = TRUE,
+  tl.cex = 0.4,
+  number.cex = 0.5,
+  tl.col = "black"
+  )
+```
+
+The correlation matrix provided shows the pairwise correlations between different variables in the dataset. Here's a brief comment on each correlation:
+
+- A modest positive correlation between Heart Disease and Age suggests that older portions of the population tend to suffer from this disease. However, the magnitude of this correlation is not remarkably high, which means that it is not unlikely that also younger portion of the population might suffer from heart disease.
+- A negative correlation between Heart Disease and MaxHR is also found. The moderate magnitude of 0.4 can tell us that there is a noticeable relation. It seems that when the maximum Heart Rate decreses, the likelihood of Heart Disease tends to increase.
+- A positive correlation between Heart disease and Oldpeak of magnitude 0.40 suggests that when the blood flow, measured during exercise, increases, it increases also the likelihood of Heart Disease.
+- A weak positive correlation between Heart Disease and RestingBP induce us to think that as the resting blood pressure increases the likelihood of Heart Disease decreases. This low correlation suggest that the resting blood pressure alone may not provide strong predictive power for determining the presenze of Heart Disease
+- A modest negative correlation between Heart Disease and Cholesterol is found. This suggest that as cholesterol levels tends to increase, there tends the likelihood of Heart Disease to slightly decrease.
+
+### Conditioned distrubutions for numerical columns
+```{r}
+result=as.factor(data$HeartDisease)
+
+a = ggplot(data, aes(x = Age, fill = result)) +
+  geom_density(alpha = 0.4) +
+  ggtitle("Age") +xlab("Age")
+b = ggplot(data, aes(x = RestingBP, fill = result)) +
+  geom_density(alpha = 0.4) +
+  ggtitle("RestingBP") +xlab("RestingBP")
+c = ggplot(data, aes(x = Cholesterol, fill = result)) +
+  geom_density(alpha = 0.4) +
+  ggtitle("Cholesterol") +xlab("Cholesterol")
+d = ggplot(data, aes(x = MaxHR, fill = result)) +
+  geom_density(alpha = 0.4) +
+  ggtitle("MaxHR") +xlab("MaxHR")
+e = ggplot(data, aes(x = Oldpeak, fill = result)) +
+  geom_density(alpha = 0.4) +
+  ggtitle("Oldpeak") +xlab("Oldpeak")
+grid.arrange(a, b, c, d, e, nrow = 3)
+```
+OLDPEAK:
+From the conditioned density plot shown above, it can be observed that individuals whose oldpeak value hovers around zero are less likely to experience heart disease. Moreover, negative deviations from an oldpeak of zero do not appear to be associated with the occurrence of heart disease, whereas positive deviations do.
+
+RESTINGBP:
+Although the purple curve slightly peaks around a resting blood pressure value of approximately 125, the two density curves have similar shapes and considerable overlap.
+
+AGE:
+The density plot of age reveals that the two densities are skewed in opposite directions, which is consistent with expectations. The density plot representing occurrences of the disease is more concentrated on the right-hand portion of the horizontal axis, while the other density is more concentrated on the left-hand side. Additionally, it is noteworthy that the occurrence of heart disease decreases for age values greater than 60.
+
+
+MAXHR:
+Heart disease appears to be more prevalent when the Max Heart Rate is lower. However, the density functions for heart disease and non-heart disease cases share a significant overlap.
+
+CHOLESTEROL:
+Healthy values of cholesterol typically range around 200, and this is reflected in its relative density plot. The density function shows a higher density for individuals with cholesterol values close to the mentioned range.
+
+
+### Conditioned Histograms for categorical columns
+
+Let's now visually explore the relationship between the categorical variables and the response variable.
+Specifically, we will examine how the two possible labels are related to the different categorical values that this variable can take on.
+
+```{r}
+# Sex
+a <- ggplot(data, aes(x = HeartDisease, fill = Sex)) +
+  geom_bar(position = "dodge") +
+  labs(title = "HD with respect to Sex") +
+  theme_minimal() + theme(plot.title = element_text(size = 12)) +
+  theme(axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9)) + 
+  theme(axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8)) +
+  theme(legend.title = element_text(size = 8),
+        legend.text = element_text(size = 8),
+        legend.key.size = unit(0.3, "cm")) 
+
+# ChestPainType
+b <- ggplot(data, aes(x = HeartDisease, fill = ChestPainType)) +
+  geom_bar(position = "dodge") +
+  labs(title = "HD with respect to ChestPainType") +
+  theme_minimal() + theme(plot.title = element_text(size = 12)) +
+  theme(axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9)) + 
+  theme(axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8)) +
+  theme(legend.title = element_text(size = 8),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3, "cm"))
+  #guides(fill = guide_legend(ncol = 2))
+
+# RestingECG
+c <- ggplot(data, aes(x = HeartDisease, fill = RestingECG)) +
+  geom_bar(position = "dodge") +
+  labs(title = "HD with respect to RestingECG") +
+  theme_minimal() + theme(plot.title = element_text(size = 12)) +
+  theme(axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9)) + 
+  theme(axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8)) +
+  theme(legend.title = element_text(size = 8),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3, "cm")) 
+
+# ExerciseAngina
+d <- ggplot(data, aes(x = HeartDisease, fill = ExerciseAngina)) +
+  geom_bar(position = "dodge") +
+  labs(title = "HD with respect to ExerciseAngina") +
+  theme_minimal() + theme(plot.title = element_text(size = 12)) +
+  theme(axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9)) + 
+  theme(axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8)) +
+  theme(legend.title = element_text(size = 8),
+        legend.text = element_text(size = 8),
+        legend.key.size = unit(0.3, "cm"))  
+
+# ST_Slope
+e <- ggplot(data, aes(x = HeartDisease, fill = ST_Slope)) +
+  geom_bar(position = "dodge") +
+  labs(title = "HD with respect to ST_Slope") +
+  theme_minimal() + theme(plot.title = element_text(size = 12)) +
+  theme(axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9)) + 
+  theme(axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8)) +
+  theme(legend.title = element_text(size = 8),
+        legend.text = element_text(size = 8),
+        legend.key.size = unit(0.3, "cm"))  
+
+# FastingBS
+f <- ggplot(data, aes(x = HeartDisease, fill = factor(FastingBS))) +
+  geom_bar(position = "dodge") +
+  labs(title = "HD with respect to FastingBS") +
+  theme_minimal() + theme(plot.title = element_text(size = 12)) +
+  theme(axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9)) + 
+  theme(axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8)) +
+  theme(legend.title = element_text(size = 8),
+        legend.text = element_text(size = 8),
+        legend.key.size = unit(0.3, "cm")) 
+
+grid.arrange(a,b,c,d,e,f, nrow=3)
+```
+
+While the top left plot indicates a higher proportion of men being at risk of heart disease compared to women, the top right plot surprisingly shows that many individuals who suffered from heart disease did not experience chest pain.
+Furthermore, the evidence suggests that the categorical variable "st_slope" mostly had the value "flat" for the vast majority of individuals who are at risk of heart disease.
+
+### Outliers
+
+Outliers can be visually detected by plotting box-plots, as all the points that are beyond the whiskers. 
+Futhermore, the boxes' length also provides information on the data variability, meaning that a long indicates a large interquartile range. 
+
+```{r}
+a <- ggplot(data, aes(x = factor(HeartDisease), y = Age)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Age") +
+  facet_wrap(~HeartDisease)
+b <- ggplot(data, aes(x = factor(HeartDisease), y = RestingBP)) +
+  geom_boxplot() +
+  labs(title = "Distribution of RestingBP") +
+  facet_wrap(~HeartDisease)
+c <- ggplot(data, aes(x = factor(HeartDisease), y = Cholesterol)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Cholesterol") +
+  facet_wrap(~HeartDisease)
+d<- ggplot(data, aes(x = factor(HeartDisease), y = MaxHR)) +
+  geom_boxplot() +
+  labs(title = "Distribution of MaxHR") +
+  facet_wrap(~HeartDisease)
+e<- ggplot(data, aes(x = factor(HeartDisease), y = Oldpeak)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Oldpeak") +
+  facet_wrap(~HeartDisease)
+
+grid.arrange(a,b,c,d,e, nrow=2)
+```
+
+In box plots, we observe notable differences in the lengths of the boxes for the "cholesterol" and "oldpeak" variables between the two labels. However, the boxes of the remaining variables appear to be quite similar across the two labels.
+
+## Partial correlations
+
+The partial correlation coefficient quantifies the strength and direction of the linear relationship between two variables while considering the effects of other variables.
+
+By examining the partial correlation matrix, we can discern the associations between pairs of numeric variables while controlling for the influence of other variables. 
+
+Positive values indicate a positive linear relationship, negative values indicate a negative linear relationship, and values close to zero suggest a weak or negligible linear relationship.
+
+Analyzing the partial correlation matrix enables us to gain insights into the interrelationships among the numeric variables, enabling us to identify variables that may exhibit stronger associations with each other when the effects of other variables are removed.
+
+```{r echo=FALSE}
+#print(correlation(data[num_cols],partial=TRUE))
+options(xtable.comment = FALSE)
+kable(correlation(data[num_cols],partial=TRUE), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("scale_down","HOLD_position"))
+```
+In the correlation table, there are several notable correlations worth discussing:
+
+* Age and MaxHR: The correlation coefficient is -0.29, indicating a moderate negative relationship. This suggests that as age increases, the maximum heart rate achieved during exercise tends to decrease. This correlation is statistically significant (p < .001), and the negative trend is expected due to the natural physiological changes that occur with age.
+
+* Age and HeartDisease: The correlation coefficient is 0.07, indicating a weak positive relationship. This correlation is not statistically significant (p = 0.195), suggesting that there is no strong linear association between age and the presence of heart disease. Other factors may play a more significant role in determining the likelihood of heart disease.
+
+* Cholesterol and HeartDisease: The correlation coefficient is -0.21, indicating a moderate negative relationship. This suggests that higher cholesterol levels are associated with a lower likelihood of heart disease. The correlation is statistically significant (p < .001), indicating that the relationship is unlikely due to random chance.
+
+* Oldpeak and HeartDisease: The correlation coefficient is 0.37, indicating a strong positive relationship. This suggests that higher values of the ST depression induced by exercise relative to rest (Oldpeak) are associated with a higher likelihood of heart disease. The correlation is highly statistically significant (p < .001), indicating a robust association.
+
+These specific correlations provide valuable insights into the relationships between certain variables and heart disease. They highlight important factors that may be indicative of heart disease risk, such as age, cholesterol levels, and the extent of ST depression during exercise.
+
+
+# Data preparation
+
+After having got some insights about the dataset under examination, it is now the moment to take the necessary steps to make it usable for the model to fit it.
+The steps are as follows:
+
+1.   Checking whether there is an approximate equal presence of instances beloging to the positive and negative class. This ought to be done for the whole dataset and then also for its training and test splits.
+2.   Categorical data has to be factorized for R to properly using them
+3.   The dataset has to be split in test and training set
+
+## Check for dataset balance
+
+Check for balance in the outcome:
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(prop.table(table(data$HeartDisease)), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+The data is well-balanced.
+
+## Factorization of categorical data
+
+Categorical variables represent qualitative characteristics such as gender, chest pain type, resting ECG results, exercise-induced angina, ST slope, and fasting blood sugar. By converting these variables into factors, we can represent them as discrete levels, enabling their usage in statistical models.
+
+
+```{r}
+data_complete <- data
+# Convert character variables to factors
+data_complete$Sex <- factor(data$Sex)
+data_complete$ChestPainType <- factor(data$ChestPainType)
+data_complete$RestingECG <- factor(data$RestingECG)
+data_complete$ExerciseAngina <- factor(data$ExerciseAngina)
+data_complete$ST_Slope <- factor(data$ST_Slope)
+data_complete$FastingBS <- factor(data$FastingBS)
+#data_complete
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(head(data_complete), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("scale_down","HOLD_position"))
+```
+
+
+## Train-test split
+
+Now we need to split the dataset into two separate subsets: the training dataset and the test dataset. These subsets will serve different purposes in our analysis. The training dataset will be used to train our models, while the test dataset will be used to evaluate the performance of the trained models.
+To accomplish this, we create two new datasets: train and test. The train dataset contains a random selection of approximately 75% of the rows from the original data_complete dataset.
+Consequently, the test set will be about the 25% of the data_complete dataset.
+
+```{r}
+rndm_indexes = sample(1:nrow(data_complete), size = round(0.75 * nrow(data_complete)),replace = FALSE)
+train = data_complete[rndm_indexes, ]
+test = data_complete[-rndm_indexes, ]
+
+
+train_not_scaled <- train
+test_not_scaled <- test
+```
+
+### Checking for balance in the training set
+
+```{r echo=FALSE}
+#prop.table(table(train$HeartDisease))
+options(xtable.comment = FALSE)
+kable(prop.table(table(train$HeartDisease)), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+### Checking for balance in the test set
+
+```{r echo=FALSE}
+#prop.table(table(test$HeartDisease))
+options(xtable.comment = FALSE)
+kable(prop.table(table(test$HeartDisease)), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+## Data Scaling 
+Scaling plays a crucial role in enhancing various aspects of the modeling process:
+
+Interpretability: By bringing coefficients to a comparable scale, scaling allows for straightforward comparisons of feature importance, leading to a more interpretable model.
+
+Fair Regularization: Scaling ensures that all predictor variables receive equal consideration during regularization, avoiding undue influence from variables with larger magnitudes. This balanced approach aids in striking the right balance between feature selection and coefficient shrinkage.
+
+Robustness to Outliers: Scaling strengthens the logistic regression model's robustness against outliers, minimizing their impact on the optimization process.
+
+Improved KNN Performance: KNN heavily relies on distance metrics for similarity measurement. Scaling guarantees that each feature contributes proportionally to the distance calculation, avoiding biases and enhancing performance.
+
+Simplified Hyperparameter Tuning: Scaling streamlines hyperparameter tuning for KNN, especially when choosing the number of neighbors (k). This facilitates fair comparisons of model performance across different k values. 
+
+```{r}
+means <- list(Age = mean(train$Age), Cholesterol= mean(train$Cholesterol), MaxHR=mean(train$MaxHR), Oldpeak= mean(train$Oldpeak), mean(train$RestingBP))
+
+stds <- list(Age = sd(train$Age), Cholesterol= sd(train$Cholesterol), MaxHR=sd(train$MaxHR), Oldpeak= sd(train$Oldpeak), sd(train$RestingBP))
+```
+
+```{r}
+train$Age <- (train$Age- means$Age)/stds$Age
+train$Cholesterol <- (train$Cholesterol- means$Cholesterol)/stds$Cholesterol
+train$MaxHR <- (train$MaxHR- means$MaxHR)/stds$MaxHR
+train$Oldpeak <- (train$Oldpeak- means$Oldpeak)/stds$Oldpeak
+train$RestingBP <- (train$RestingBP- mean(train$RestingBP))/sd(train$RestingBP)
+
+
+test$Age <- (test$Age- means$Age)/stds$Age
+test$Cholesterol <- (test$Cholesterol- means$Cholesterol)/stds$Cholesterol
+test$MaxHR <- (test$MaxHR- means$MaxHR)/stds$MaxHR
+test$Oldpeak <- (test$Oldpeak- means$Oldpeak)/stds$Oldpeak
+test$RestingBP <- (test$RestingBP- mean(test$RestingBP))/sd(test$RestingBP)
+```
+
+## Threshold selection
+
+Before going any further it is important to reason a bit about some of the metric that will be used later on to
+evaluate the models’ performance. - Accuracy: It is the ratio of the correct prediction to the total model
+predictions. - Sensitivity: also referred as true positive ration, is a metric that measures the proportion of
+actual positive instances that are correctly identified by the model. - Precision: It is the proportion of the
+true positive instances among the ones that the model predicted being positive.
+The fact that the dataset is balanced means that there is no risk to achieve a high accuracy by simply
+predicting the majority class potentially and this potentially makes the accuracy a valid metric. However,
+given the task at hand, some extra caution should be taken. In fact, It is preferable to misclassify a patient
+as at risk of suffering from heart disease when it is actually not, rather than the other way around. In other words, it is wiser to have a model with high sensitivity at the expense of its precision. It is possible to achieve this by choosing a threshold that makes the model's predictions more cautious (i.e., increasing the sensitivity). For the aforementioned reasons, setting a low threshold will inevitably increase the number of false positives, but it is a trade-off worth accepting.
+
+```{r}
+# We define the threshold for the classification task
+threshold <- 0.4
+```
+
+Definition of the function responsible for computing metrics.
+
+```{r}
+calculate_metrics <- function(actual, predicted, threshold) {
+  pred <- ifelse(predicted >= threshold, 1, 0)
+  conf_mat <- table(actual, pred)
+  
+  # Calculate metrics
+  true_positives <- conf_mat[2, 2]
+  false_positives <- conf_mat[1, 2]
+  false_negatives <- conf_mat[2, 1]
+  true_negatives <- conf_mat[1, 1]
+  
+  accuracy <- (true_positives + true_negatives) / sum(conf_mat)
+  sensitivity <- true_positives / (true_positives + false_negatives)
+  specificity <- true_negatives / (true_negatives + false_positives)
+  precision <- true_positives / (true_positives + false_positives)
+  f1_score <- 2 * (precision * sensitivity) / (precision + sensitivity)
+  
+  results <- list(
+    ConfusionMatrix = conf_mat,
+    Accuracy = accuracy,
+    Sensitivity = sensitivity,
+    Specificity = specificity,
+    Precision = precision,
+    F1Score = f1_score
+  )
+  
+  return(results)
+}
+```
+# Models implemenations
+
+## NAIVE
+
+The Naive Bayes classifier is classification technique based on the Bayes Theorem.
+This classifier assumes that all the variables are independent of each other, hence the term "naive". Despite this not being true the model usually perform decently well.
+
+### Training
+
+```{r}
+new_df_train <- train
+new_df_test <- test
+
+new_df_train$HeartDisease <- as.factor(train$HeartDisease)
+new_df_test$HeartDisease <- as.factor(test$HeartDisease)
+
+```
+
+
+```{r}
+nb_model <- naive_bayes(HeartDisease ~., data = new_df_train)
+```
+
+### Prediction of the Naive Bayes
+
+```{r}
+naivebayes_prediction_test <- predict(nb_model, newdata = new_df_test, type = "prob")
+results_naive_bayes_04 <- calculate_metrics(test$HeartDisease, naivebayes_prediction_test[,2], 0.4)
+results_naive_bayes_04$ConfusionMatrix
+```
+
+
+
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+naive_res <- as.data.frame(results_naive_bayes_04[-1])
+kable(naive_res, format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+## Generalized Linear Model
+
+In the implemented regression models, Generalized Linear Models (GLMs) are chosen over simple linear regression due to the nature of the outcome variable being categorical, not continuous.
+
+GLMs offer the advantage of flexibility in modeling non-normal and categorical outcomes, accommodating various distributions such as binomial, Poisson, or gamma.
+
+For this specific case involving a binary outcome variable, the GLM function is set to use the "binomial" link function. This choice is appropriate for modeling binary outcomes, such as yes/no or success/failure, where the response follows a Bernoulli distribution.
+
+By employing the GLM approach with the appropriate "binomial" link function, we can effectively capture the relationship between the predictors and the probability of the binary outcome. This allows for more accurate predictions and facilitates a clearer interpretation of the results
+
+```{r}
+complete_log_reg = glm(data = train, train$HeartDisease ~ .,family = "binomial")
+complete_log_reg_summary = summary(complete_log_reg)
+complete_log_reg_summary
+```
+
+### VIF
+
+VIF stands for Variance Inflation Factor, and it is used to assess assesses multicollinearity in the context of regression analysis. Checking for multicollinearity is a required step to take in order to avoid getting unreliable estimates of the regression coeffiecients.
+
+The VIF is calculated for each independent variable as the ratio of the variance of that estimated coefficient when that variable is included in the model to variance of the estimated coefficient when that variables is excluded from the model.
+
+$VIF_i = \frac{1}{1 - R^2_i}$ where  $R^2_i$ is the coefficient of determination (R-squared) of the regression model when the ith variable is regressed on all the other independent variables.
+
+Interpretation of the possible values of VIF:
+
+- VIF = 1 indicates no multicollinearity, so the variable has no correlation with the other independent variables.
+- VIF ranging between 1 and 5 indicates moderate but acceptable multi-collinearity
+- VIF greater than 5 suggests high multicollinearity.
+
+By iteratively removing variables with high VIF, you can create a more stable and reliable regression model with reduced multicollinearity:
+
+1. The VIF is calculated for each independent variable in the model that uses all of them.
+2. The variables whose VIF value greater than 5 might get removed.
+3. The model with the new set of variable is fitted to the data.
+4. The VIF values for new model are newly computed and the feature selection is repeated.
+
+```{r echo=FALSE}
+#vif(complete_log_reg)
+options(xtable.comment = FALSE)
+kable(vif(complete_log_reg), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+### Predictions of the GLM
+
+```{r}
+#Prediction
+pred_complete_log_reg<- predict(complete_log_reg, test, type = "response")
+```
+
+### Plotting the GLM's results
+
+```{r}
+data_plot_comp_log_reg <- ifelse(pred_complete_log_reg >= 0.4, 1, 0)
+
+predicted_data = data.frame(prob.of.HD = pred_complete_log_reg, HD = test$HeartDisease)
+predicted_data= predicted_data[order(predicted_data$prob.of.HD, decreasing = FALSE),]
+predicted_data$rank= 1:nrow(predicted_data)
+
+clr_graph <- ggplot(data = predicted_data, aes(x = rank, y = prob.of.HD)) +
+  geom_point(aes(color = as.factor(HD)), alpha = 1, shape = 1, stroke = 1) +
+  ylab("Predicted probability of Heart Disease") +
+  ggtitle("Complete Logistic Regression Curve")
+
+clr_graph
+```
+
+### Confusion matrix
+
+Since we now have the prediction results, we can obtain the confusion matrix for the chosen threshold value (0.4) in the logistic regression model.
+
+The confusion matrix is a table that summarizes the performance of a classification model by displaying the counts of true positives, true negatives, false positives, and false negatives predictions.
+
+Each row in the confusion matrix represents an actual class, while each column represents the predicted class. The numbers in each cell of the confusion matrix indicate the count of instances belonging to the class of the row that the model correctly or incorrectly classified as belonging to the class of the column
+
+### GLM results
+
+```{r}
+#Confusion matrix 0.4
+results_complete_log_reg_04 <- calculate_metrics(test$HeartDisease, pred_complete_log_reg, 0.4)
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(results_complete_log_reg_04[-1]), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+
+```
+
+## StepSize selection
+
+Logistic regression with stepwise selection is a technique used to build a logistic regression model by iteratively selecting and adding or removing predictor variables based on their statistical significance or contribution to the model. The stepwise selection procedure helps to identify a subset of predictors that are most relevant for predicting the outcome variable.
+The two main approaches that can be adopeted two implement stepsize selection are:
+
+- Backward elimination
+- Forward selection
+
+Before proceeding any further, let's define the two criterion there will be use:
+
+- Akaike information Criterion, AIC for short: $AIC = 2 * k - 2 * log(L)$. AIC tends to favor more complex models if compared to BIC, especially when the sample size is small.
+- Bayesian Information Criterion, $BIC = k * log(n) - 2 * log(L)$. The "n" refers to the sample size. Therefore, BIC tends to favor simpler models, even with larger sample sizes.
+
+The latter maximizes the posterior probability given the data and enforce a stronger penalization for the model complexity compared to the former, which indeed penalizes models with more parameters but also rewards those that provide a better fit to the data.
+
+```{r}
+log_reg_stepwise <- glm(data = train, HeartDisease ~  Age +
+                   Sex + ChestPainType + RestingBP + Cholesterol +
+                   FastingBS + RestingECG + MaxHR + ExerciseAngina + Oldpeak + ST_Slope, family = binomial())
+```
+
+### Backward elimination
+
+Backward elimination is a technique used to identify the most relevant and significant features that contribute to the prediction target variable.
+
+The procedure starts with a model containing all the available features which will be iteratively removed one at time until a stop criterion is met.
+
+The procedure is as follows:
+
+1. The complete model is fitted to the data and its performance is evaluated (including AIC/BIC calculation)
+2. The least significant feature is removed 
+3. The model is then re-fitted and re-evaluated (including AIC/BIC calculation)
+4. The steps two and three are repeated until a stopping criterion is met, i.e. no more features can be removed or when AIC/ BIC stops improving significantly.
+
+```{r}
+log_reg_step_back <- stepAIC(log_reg_stepwise, direction = "back" ,trace = FALSE)
+```
+
+```{r}
+log_reg_step_back_summary=summary(log_reg_step_back)
+log_reg_step_back_summary
+```
+
+The presented output showcases the final model resulting from the backward stepwise selection process. The primary objective of this selection process is to identify a model with a low AIC while preserving strong predictive capabilities. The "Signif. codes" column illustrates the significance levels of each coefficient. Specifically, the significance codes in the output demonstrate that certain variables exhibit exceptionally low p-values, underscoring their high significance within the model.
+
+#### Prediction with Backward elimination
+
+```{r}
+#Prediction
+pred_log_reg_step_back <- predict(log_reg_step_back, test, type = "response")
+```
+
+#### Backward Elimination graph
+
+```{r}
+data_plot_log_reg_step_back <- ifelse(pred_log_reg_step_back >= 0.4, 1, 0)
+
+predicted_data = data.frame(prob.of.HD = pred_log_reg_step_back, HD = test$HeartDisease)
+predicted_data= predicted_data[order(predicted_data$prob.of.HD, decreasing = FALSE),]
+predicted_data$rank= 1:nrow(predicted_data)
+
+be_graph <- ggplot(data = predicted_data, aes(x = rank, y = prob.of.HD)) +
+  geom_point(aes(color = as.factor(HD)), alpha = 1, shape = 1, stroke = 1) +
+  ylab("Predicted probability of Heart Disease") +
+  ggtitle("Logistic Regression with backward elimination Curve")
+be_graph
+```
+
+
+#### Confusion Matrix
+
+```{r}
+#Confusion matrix 0.4
+results_log_reg_step_back_04 <- calculate_metrics(test$HeartDisease, pred_log_reg_step_back, 0.4)
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(results_log_reg_step_back_04[-1]), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+### Forward selection
+Analogously to the backward selection, forward select aims to identify the most relevant features but it does so in a different way.
+
+More precisely:
+
+1. The model is initialized with no features
+2. At each iteration all the features are considered and the model is fitted with the current set of selected variables and the candidate one.
+3. Each of these alternatives are evaluated and the one that results in the best improvement in model's performance is selected.
+4. Then model that employs the previous set of features plus the one just selected becomes the baseline to build on at the next iteration where a new feature will be added to it.
+5. Repeat until a stopping criterion is met.
+
+It's important to note that forward selection is a stepwise approach and may not always lead to the globally optimal subset of features. 
+
+```{r}
+log_reg_step_forw <- stepAIC(log_reg_stepwise, direction = "forward", trace = FALSE)
+```
+
+```{r}
+log_reg_step_forw_summary=summary(log_reg_step_forw)
+log_reg_step_forw_summary
+```
+The output presents the final model obtained from the forward stepwise selection process, displaying essential information such as coefficients, standard errors, z-values, and p-values for each predictor variable. The "Signif. codes" column indicates the significance level of the coefficients.Notably, low p-values in the output signify high significance for certain variables within the model.
+
+#### Predictions with Forward
+```{r}
+#Prediction
+pred_log_reg_step_forw<- predict(log_reg_step_forw, test, type = "response")
+```
+
+#### Forward graph
+```{r}
+data_plot_log_reg_step_forw <- ifelse(pred_log_reg_step_forw >= 0.4, 1, 0)
+
+predicted_data = data.frame(prob.of.HD = pred_log_reg_step_forw, HD = test$HeartDisease)
+predicted_data= predicted_data[order(predicted_data$prob.of.HD, decreasing = FALSE),]
+predicted_data$rank= 1:nrow(predicted_data)
+
+fw_graph <- ggplot(data = predicted_data, aes(x = rank, y = prob.of.HD)) +
+  geom_point(aes(color = as.factor(HD)), alpha = 1, shape = 1, stroke = 1) +
+  ylab("Predicted probability of Heart Disease") +
+  ggtitle("Logistic Regression with forward selection Curve")
+fw_graph
+```
+
+
+#### Confusion Matrix
+```{r}
+#Confusion matrix 0.4
+results_log_reg_step_forw_04 <- calculate_metrics(test$HeartDisease, pred_log_reg_step_forw, 0.4)
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(results_log_reg_step_forw_04[-1]), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+
+### Different Logistic Regression Graphs
+
+```{r, fig.width=20, fig.height=4}
+grid.arrange(clr_graph, be_graph, fw_graph, nrow=1)
+```
+
+### Complete logistic regression vs Stepsize selection
+
+```{r}
+logistic_vs_stepsize <- rbind(as.data.frame(results_complete_log_reg_04[-1]), as.data.frame(results_log_reg_step_back_04[-1]), as.data.frame(results_log_reg_step_forw_04[-1]))
+rownames(logistic_vs_stepsize) <- c("Complete Logistic Regression", "Backward selection", "Forward selection")
+```
+
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(logistic_vs_stepsize), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+## Shrinkage Methods
+
+Shrinkage methods are techniques used in regression analysis to address the issue of overfitting and improve the stability and generalization of the model.
+They way they do so is by trying to reduce the variance of the coefficient estimates by shrinking them towards a common value or towards zero.
+
+Shrinkage methods, such as ridge regression, lasso regression, introduce a penalty term in the regression objective function that constrains the magnitude of the coefficient estimates. This penalty term enforces the reduction of the coefficient which shrinked toward zero, hence the term "shrinkage".
+
+
+The cv.glmnet function performs k-fold cross-validation on the ridge logistic regression model. It searches for the optimal value of the regularization parameter ($\lambda$) that minimizes the cross-validated error or maximizes the cross-validated classification accuracy, depending on the specified type.measure.
+
+### Ridge
+
+Ridge regression is a regularization technique used in linear regression to address the issue of multicollinearity (high correlation) among predictor variables and to prevent overfitting. 
+Ridge resgression are also known as L2 norm regression. The penalty term is computed as the square of the L2 norm of the coefficient vector,multiplied by a regularization parameter called lambda ($\lambda$).
+
+The higher values of lambda the more severe shrinkage. It is important to notice that differently from Lasso regression L2 norm regression does not enforce sparsity.
+
+```{r}
+# Reformat of train and test data so we are able to perform ridge and lasso
+shrinkage_train=data.matrix(train[,1:11])
+shrinkage_test=data.matrix(test[,1:11])
+```
+
+#### Definition of the model for shrinkage with Cross-validation
+
+```{r}
+# Definition of the model for shrinkage with Cross-validation
+
+ridge_model=cv.glmnet(shrinkage_train, train$HeartDisease, alpha = 0, family = "binomial", type.measure = "class")
+ridge_model
+```
+
+Then we can observe the coefficients:
+
+```{r}
+coef(ridge_model)
+```
+
+#### Misclassification error
+
+```{r}
+plot(ridge_model, main="Misclassification error for Ridge Regression given log lambda value\n")
+```
+As log($\lambda$) increases, the misclassification error also increases. For values of log($\lambda$), the error sharply increases and stabilizes for horizontal axis values greater than 2.
+
+#### Definition of the model for shrinkage without Cross-validation
+
+```{r}
+# Definition of the model for shrinkage without Cross-validation
+
+z=glmnet(shrinkage_train, train$HeartDisease,alpha = 0, family = "binomial", type.measure = "class") 
+plot(z, xvar="lambda", main="Shrinkage of coeffiecients given log lambda value\n") 
+abline(v = log(ridge_model$lambda.min), col = "red",lty=2)
+```
+
+
+
+#### Ridge Prediction at different threshold
+
+```{r}
+pred_ridge<- predict(ridge_model,shrinkage_test, type = "response", s = ridge_model$lambda.min)
+```
+
+
+```{r}
+#Confusion matrix 0.4
+results_ridge_04 <- calculate_metrics(test$HeartDisease, pred_ridge, 0.4)
+results_ridge_04$ConfusionMatrix
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(results_ridge_04[-1]), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+### Lasso
+
+The word "Lasso" stands for " Least Absolute Shrinkage and Selection Operator". As its name suggest is a method that falls within the category of the shrinkage ones.
+
+Lasso enhance sparsity by adding a penalty that pushes coefficients' values toward zero. It does so via the L1 norm (sum of absolute values) of the coefficient vector multiplied by a regularization parameter called lambda ($\lambda$).
+
+The advantage of lasso models lies in their ability to automatically select important features and disregard irrelevant ones.
+
+### Definition of the model for shrinkage with Cross-validation
+```{r}
+# Definition of the model for shrinkage with Cross-validation
+
+lasso_model=cv.glmnet(shrinkage_train, train$HeartDisease, alpha = 1, family = "binomial", type.measure = "class")
+lasso_model
+```
+
+```{r}
+coef(lasso_model)
+```
+The L1 regularization method performed feature selection by driving to zero all coefficients that were not deemed crucial for the prediction task. This selection process aligns perfectly with the insights gained from exploratory data analysis (EDA). During EDA, we observed that the occurrence of heart disease was closely related to high frequencies of specific levels of certain categorical variables. The L1 regularization retained the coefficients of these informative variables, as they play a significant role in predicting heart disease.
+
+For instance, in the sex variable histogram, we observed that men were more likely to suffer from heart disease. This observation was further confirmed by LASSO (L1 regularization) since it did not remove this feature from the predictor set. On the other hand, the "RestingECG" variable, which is characterized by similar frequencies of its levels for both label 1 and label 0 got its coefficient drawn to zero.
+
+```{r}
+plot(lasso_model,main="Misclassification error for Lasso Regression given log lambda value\n")
+```
+The misclassification error remains relatively stable regardless of the values on the horizontal axes until positive values are reached. Beyond that point, it gradually increases and then experiences a sudden spike, becoming quite high.
+
+### Definition of the model for shrinkage without Cross-validation
+```{r}
+# Definition of the model for shrinkage without Cross-validation
+
+z=glmnet(shrinkage_train, train$HeartDisease, alpha = 1, family = "binomial", type.measure = "class") 
+plot(z, xvar="lambda",main="Shrinkage of coeffiecients given log lambda value\n")
+abline(v = log(ridge_model$lambda.min), col = "red",lty=2)
+```
+
+#### Lasso prediction at different threshold values
+
+```{r}
+pred_lasso<- predict(lasso_model,shrinkage_test, type = "response", s = lasso_model$lambda.min)
+```
+
+```{r}
+#Confusion matrix 0.4
+results_lasso_04 <- calculate_metrics(test$HeartDisease, pred_lasso, 0.4)
+results_lasso_04$ConfusionMatrix
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(results_lasso_04[-1]), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+### RIDGE VS LASSO
+
+```{r}
+ridge_vs_lasso <- rbind(as.data.frame(results_ridge_04[-1]),as.data.frame(results_lasso_04[-1]))
+rownames(ridge_vs_lasso) <- c("Ridge", "Lasso")
+```
+
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(ridge_vs_lasso), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+# Discriminant Analysis
+
+In this project, we assume that our continuous predictor variables have homoscedasticity. In other words, the specific categories of the categorical variable do not significantly impact the relationship between the dependent variable and the continuous predictors.
+
+## LDA
+
+LDA, which stands for "Linear Discriminant Analysis," is a technique used to reduce the dimensionality of the input data while preserving the discriminatory information between classes. It is commonly used for classification tasks, where the goal is to identify which class a new observation belongs to based on its features.
+
+For LDA to work effectively, it assumes the following:
+
+· The continuous predictors have a multivariate normal distribution within each class. This means that the data points belonging to each class follow a normal distribution in the feature space.
+· The covariance matrices of different classes are equal.This assumption is called homoscedasticity in LDA and means that the variability of the data points is similar across different classes.
+
+LDA seeks to find linear combinations of the original predictor variables that best separate the classes. It does this by minimizing the within-class variation and maximizing the between-class variation in the transformed feature space.
+
+For all this reasons LDA can be sensitive to outliers
+
+### Remove outliers
+Because of the potential sensitivity to outliers we proceed to removing them.
+
+```{r}
+train_free_outliers <- train
+num_cols_outliers <- subset(num_cols, num_cols != "HeartDisease")
+
+# Iteration through the columns
+for (col in num_cols_outliers) {
+  # Calculate limits for the outliers
+  Q1 <- quantile(train_free_outliers[[col]], 0.25)
+  Q3 <- quantile(train_free_outliers[[col]], 0.75)
+  IQR <- Q3 - Q1
+  inf_lim <- Q1 - 1.5 * IQR
+  sup_lim <- Q3 + 1.5 * IQR
+  
+  # Remove the outliers for the current columns
+  train_free_outliers <- train_free_outliers %>%
+    filter(!!sym(col) >= inf_lim, !!sym(col) <= sup_lim)
+}
+
+# Number of rows before the removal of the outliers
+nrow_before <- nrow(train)
+# Number of rows after the removal of the outliers
+nrow_after <- nrow(train_free_outliers)
+
+paste ("Number of rows before the removal of the outliers: ", nrow_before)
+paste ("Number of rows after the removal of the outliers: ", nrow_after)
+```
+
+### Normality check for numerical values
+
+Quantile plots, or QQ-plots for short, aim to assess whether a dataset follows a particular distribution, in this case a normal one.
+
+Points deviating a lot from from the 45° line, suggests that their distrubution does not resemble a normal.
+
+```{r fig.width=10, fig.height=10 }
+# Function to plot QQ-plots for specified variables based on the target variable
+plot_qqplots <- function(data, variables, target) {
+  # Set the layout to a grid
+  par(mfrow = c(length(variables), 2))
+  
+  # Loop through each variable and plot the QQ-plots
+  for (var in variables) {
+    qqnorm(data[[var]][data[[target]] == 0])
+    qqline(data[[var]][data[[target]] == 0])
+    title(paste(var, "QQ-plot - Heart Disease = 0"), line = 0.5)
+    
+    qqnorm(data[[var]][data[[target]] == 1])
+    qqline(data[[var]][data[[target]] == 1])
+    title(paste(var, "QQ-plot - Heart Disease = 1"), line = 0.5)
+  }
+  
+  # Reset the layout to the default
+  par(mfrow = c(1, 1))
+}
+
+# Example usage with your dataset and variable names
+# Assuming "train" is your dataset and "HeartDisease" is the target variable
+variables <- c("Age", "RestingBP", "Cholesterol", "MaxHR", "Oldpeak")
+plot_qqplots(train_free_outliers, variables, "HeartDisease")
+```
+
+It seems that almost all the features have a normal distribution, we can further investigate this by applying the Shapiro-Wilk normality test.
+
+This test is based on the comparison between the observed data and what would be expected in a normally distributed population. 
+The null hypothesis of the Shapiro-Wilk test is that the data is normally distributed. If the p-value obtained from the test is greater than a pre-defined significance level (commonly set at 0.05), we fail to reject the null hypothesis and conclude that there is no strong evidence to suggest that the data significantly deviates from normality. On the other hand, if the p-value is less than the significance level, we reject the null hypothesis and infer that the data significantly departs from normality. It's essential to note that the Shapiro-Wilk test is most powerful for moderate to large sample sizes, and it may become less reliable for very small sample sizes.
+
+```{r}
+perform_shapiro_test <- function(data, variable, target) {
+  cat("Shapiro-Wilk test for", variable, "\n")
+  
+  # Subset the data for each HeartDisease category
+  data_0 <- data[[variable]][data[[target]] == 0]
+  data_1 <- data[[variable]][data[[target]] == 1]
+  
+  # Perform Shapiro-Wilk test
+  result_0 <- shapiro.test(data_0)
+  result_1 <- shapiro.test(data_1)
+  
+  # Print test results
+  cat("HeartDisease = 0: p-value =", result_0$p.value, "\n")
+  cat("HeartDisease = 1: p-value =", result_1$p.value, "\n\n")
+}
+
+# Loop through each variable and perform the Shapiro-Wilk test
+for (var in num_cols[-length(num_cols)]) {
+  perform_shapiro_test(train_free_outliers, var, "HeartDisease")
+}
+```
+Upon conducting the Shapiro-Wilk test, we found that for most of the features, the resulting p-values were not significant, suggesting that the data approximately follows a normal distribution. However, the OldPeak variable stood out with a significant p-value, indicating that its data significantly deviates from normality.
+
+To further assess the normality assumption, we examined the QQ plot for each feature. In general, the data points appeared to align reasonably well with the diagonal line, supporting the assumption of normality for the majority of the features. However, the QQ plot for the OldPeak variable showed considerable deviation from the diagonal line, reinforcing the finding from the Shapiro-Wilk test.
+
+It's important to consider the influence of the sample size on these results. The Shapiro-Wilk test can become more sensitive to even minor deviations from normality with larger sample sizes, potentially detecting deviations that may not be practically significant. Conversely, the QQ plot provides a visual impression of normality, and with a larger sample, it may present a more representative pattern of the data distribution.
+
+In conclusion we have decided to exclude the OldPeak variable from the model to ensure that the underlying assumptions of the LDA are met.
+
+### LDA initialization
+
+```{r}
+#names(train_free_outliers[, -which(names(train_free_outliers) == "Oldpeak")])
+lda_model <- lda(train_free_outliers$HeartDisease ~ Age + Sex + ChestPainType + RestingBP + Cholesterol + FastingBS + RestingECG + MaxHR + ExerciseAngina + ST_Slope, data = train_free_outliers)
+lda_model
+```
+
+### LDA PREDICTIONS AT DIFFERENT THRESHOLDS
+
+```{r}
+## Predictions LDA
+# Computing predictions:
+pred_lda<- predict(lda_model, test, type = "response")
+post_lda<- pred_lda$posterior[,2]
+```
+
+```{r}
+#Confusion matrix 0.4
+results_lda_04 <- calculate_metrics(test$HeartDisease, post_lda, 0.4)
+results_lda_04$ConfusionMatrix
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(results_lda_04[-1]), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+
+
+```{r, fig.height=5}
+par(mar=c(1, 1, 1, 1))
+ldahist(pred_lda$x[,1], pred_lda$class, col=2) 
+title("Model discrimination for Heart Diseas classes")
+```
+
+The histogram plot displays the discriminant function values for two groups: "Heart Disease Positive" and "Heart Disease Negative". 
+The function effectively separates the groups, with higher values associated more with heart disease cases. There is a slight overlap in mid-range values, but overall, the model performs well in classifying heart disease status.
+
+## QDA
+
+Quadratic Discriminant analysis or QDA:
+
+- analogously to LDA assumes a that the predictors follow a multivariate normal distribution.
+- However, it allows for different covariance matrices across classes.
+
+In fact, QDA is particularly useful when the classes have different covariance structures, as it can capture more complex relationships among the predictor variables.
+
+QDA makes use of non-linear boundaries which is also why it might be more computationally expensive than LDA. 
+
+```{r}
+qda_model <- qda(train_free_outliers$HeartDisease~ Age + Sex + ChestPainType + RestingBP + Cholesterol + FastingBS + RestingECG + MaxHR + ExerciseAngina + ST_Slope, data = train_free_outliers, family="binomial")
+qda_model
+```
+### QDA predictions at different threshold levels
+
+```{r}
+# Computing predictions:
+pred_qda_model<- predict(qda_model, test, type = "response") 
+post_qda<- pred_qda_model$posterior[,2]
+```
+
+```{r}
+#Confusion matrix 0.4
+results_qda_04 <- calculate_metrics(test$HeartDisease, post_qda, 0.4)
+results_qda_04$ConfusionMatrix
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(results_qda_04[-1]), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+## LDA vs QDA
+```{r}
+lda_vs_qda <- rbind(as.data.frame(results_lda_04[-1]),as.data.frame(results_qda_04[-1]))
+rownames(lda_vs_qda) <- c("LDA", "QDA")
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(lda_vs_qda), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+
+
+
+## KNN
+
+KNN stands for K-Nearest Neighbor. It is a non-parametric and instance-based algorithm, which means it doesn't make any assumptions about the underlying data distribution and learns directly from the training data. The "k" refers to the number of nearest neighbors considered for classification. When we want to classify a new data point, the algorithm looks at the k nearest data points and determines its class based on the majority of votes among them.
+KNN is not directly appliable to mixed data points; in fact numerical values are continuous and can be directly used to calculate distances between data points. 
+In contrast categorical attributes require the use of appropriate distance metrics to measure the similarity between data points. 
+In order to avoid further complexity in the model we have decided to focus only on numerical variables and try to analyze the performances.
+
+### KNN with scaled data
+```{r}
+# Subset train data in order to have only numerical columns
+train_only_num <- train[, num_cols]
+train_only_num <- train_only_num[-length(train_only_num)]
+test_only_num <- test[, num_cols]
+test_only_num <- test_only_num[-length(test_only_num)]
+
+# Initialize the accuracy and sensitivity vector
+knn_accuracy_values = vector() 
+knn_sensitivity_values = vector()
+
+# Run KNN for different k values
+for (k in 1:100) {
+  knn_model = knn(train_only_num, test_only_num, cl = train$HeartDisease, k = k) 
+  knn_conf_mat = table(test$HeartDisease, knn_model)
+  knn_accuracy_values=c(knn_accuracy_values,(knn_conf_mat[1,1]+knn_conf_mat[2,2])/nrow(test_only_num)) 
+  knn_sensitivity_values=c(knn_sensitivity_values, knn_conf_mat[2,2]/(knn_conf_mat[2,2]+knn_conf_mat[2,1]) )
+}
+
+paste("ACCURACY FOR BEST K: (", which.max(knn_accuracy_values), ") = ", max(knn_accuracy_values))
+paste("SENSITIVITY FOR BEST K: (", which.max(knn_sensitivity_values), ") = ",  max(knn_sensitivity_values))
+```
+
+Since we want to maximize the sensitivity, the chosen K is 35.
+Now it is possible to calculate the whole metrics.
+
+```{r}
+final_K = which.max(knn_sensitivity_values)
+final_knn_model = knn(train_only_num, test_only_num, cl = train$HeartDisease, k = final_K)
+pred_knn = ifelse(as.numeric(final_knn_model) >= 1.5, 1, 0)
+#Confusion matrix 0.4
+results_knn <- calculate_metrics(test$HeartDisease, as.numeric(final_knn_model), 1.5)
+results_knn$ConfusionMatrix
+```
+
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(as.data.frame(results_knn), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+```
+
+
+
+```{r}
+accuracy_knn_df = data.frame(K=1:100,accuracy = knn_accuracy_values)
+sensitivity_knn_df=data.frame(K=1:100, sensitivity=knn_sensitivity_values)
+
+accuracy_knn_plot <- ggplot(accuracy_knn_df, aes(x = K, y = accuracy)) + 
+  geom_line(colour="blue") +
+  geom_point(colour="blue") + 
+  ggtitle("Accuracy of K-NN given K")
+
+sensitivity_knn_plot <- ggplot(sensitivity_knn_df, aes(x = K, y = sensitivity)) + 
+  geom_line(colour="blue") +
+  geom_point(colour="blue") + 
+  ggtitle("Sensitivity of K-NN given K")
+
+grid.arrange(accuracy_knn_plot, sensitivity_knn_plot, nrow = 1)
+```
+
+### KNN with data not scaled
+
+```{r}
+# Subset train data in order to have only numerical columns
+train_only_num <- train_not_scaled[, num_cols]
+train_only_num <- train_only_num[-length(train_only_num)]
+test_only_num <- test_not_scaled[, num_cols]
+test_only_num <- test_only_num[-length(test_only_num)]
+
+# Initialize the accuracy and sensitivity vector
+knn_accuracy_values = vector() 
+knn_sensitivity_values = vector()
+
+# Run KNN for different k values
+for (k in 1:100) {
+  knn_model = knn(train_only_num, test_only_num, cl = train$HeartDisease, k = k) 
+  knn_conf_mat = table(test$HeartDisease,knn_model)
+  knn_accuracy_values=c(knn_accuracy_values,(knn_conf_mat[1,1]+knn_conf_mat[2,2])/nrow(test_only_num)) 
+  knn_sensitivity_values=c(knn_sensitivity_values, knn_conf_mat[2,2]/(knn_conf_mat[2,2]+knn_conf_mat[2,1]) )
+}
+
+paste("ACCURACY FOR BEST K: (", which.max(knn_accuracy_values), ") = ", max(knn_accuracy_values))
+paste("SENSITIVITY FOR BEST K: (", which.max(knn_sensitivity_values), ") = ",  max(knn_sensitivity_values))
+```
+
+
+```{r}
+accuracy_knn_df = data.frame(K=1:100,accuracy = knn_accuracy_values)
+sensitivity_knn_df=data.frame(K=1:100, sensitivity=knn_sensitivity_values)
+
+accuracy_knn_plot <- ggplot(accuracy_knn_df, aes(x = K, y = accuracy)) + 
+  geom_line(colour="blue") +
+  geom_point(colour="blue") + 
+  ggtitle("Accuracy of K-NN given K")
+
+sensitivity_knn_plot <- ggplot(sensitivity_knn_df, aes(x = K, y = sensitivity)) + 
+  geom_line(colour="blue") +
+  geom_point(colour="blue") + 
+  ggtitle("Sensitivity of K-NN given K")
+
+grid.arrange(accuracy_knn_plot, sensitivity_knn_plot, nrow = 1)
+```
+
+As mentioned before, models typically benefit from using scaled data, especially when the models operate directly with distances, as is the case with K-NN. To demonstrate this, a comparison was conducted, and the results confirmed the validity of the previous statement. The model showed an improvement of more than 8% in both sensitivity and accuracy when using scaled data. Additionally, it is worth mentioning that these better results were achieved for higher values of k compared to the case of non-scaled data.
+
+# Models comparison
+
+### ROC
+
+ROC short for Receiver Operating Characteristic is a graphical plot in which the true positive rate (sensitivity) against the false positive rate at various classification thresholds. This makes possible to visualize  the performance of a binary classification model.
+
+The best classifier one could wish for is the one that would have an ROC curve that passes through the top-left corner, indicating a TPR of 1 and an FPR of 0. 
+
+If the curve hugs the area of the graph below the diagonal line it means that the classifier makes worse prediction than random guessing.
+
+A common classifier for ROC curves is "Area under the curve" often abbreviated in "AUC".
+High values of AUC suggest that the model makes good predictions.
+
+```{r fig.width=8, fig.height=8}
+plot_roc <- function(predictions, colors, legend_labels) {
+  roc_list <- list()
+  
+  # Calcola le curve ROC per ciascuna variabile di previsione
+  for (i in 1:length(predictions)) {
+    roc_list[[i]] <- roc(test$HeartDisease, as.numeric(predictions[[i]]), levels=c(0, 1))
+  }
+  
+  # Plotta le curve ROC
+  plot(roc_list[[1]], legacy.axes=TRUE, main="Curva ROC", print.auc=FALSE, xlim=c(1.2, -0.2), col=colors[1])
+  
+  # Aggiungi le linee per le altre curve ROC
+  for (i in 2:length(roc_list)) {
+    lines(roc_list[[i]], col=colors[i])
+  }
+  
+  # Aggiungi la legenda
+  legend("bottomright", legend=legend_labels, col=colors, lty=1)
+}
+
+# Esempio di utilizzo
+predictions <- list(pred_complete_log_reg = pred_complete_log_reg,
+                    pred_log_reg_step_back = pred_log_reg_step_back,
+                    pred_log_reg_step_forw = pred_log_reg_step_forw,
+                    pred_ridge = pred_ridge,
+                    pred_lasso = pred_lasso,
+                    pred_lda = post_lda,
+                    pred_qda = post_qda
+                    )
+
+colors <- c("blue", "purple", "yellow", "green", "red", "brown", "orange", "cyan")
+legend_labels <- c("Complete logistic regression", "Logistic Regression Backward", "Logistic Regression Forward", "Ridge", "Lasso", "LDA", "QDA")
+
+# Plotta tutte le curve ROC nello stesso grafico con la legenda
+plot_roc(predictions, colors, legend_labels)
+```
+
+
+
+```{r}
+# Create dataframe for the results
+results <- data.frame(Model = character(),
+                      AUC = numeric(),
+                      stringsAsFactors = FALSE)
+
+# Calculate AUC for every model
+for (i in 1:length(predictions)) {
+  auc_value <- auc(test$HeartDisease, as.numeric(predictions[[i]]))[1]
+  results[i, "Model"] <- names(predictions)[i]
+  results[i, "AUC"] <- auc_value
+}
+
+# Order for decreasing AUC
+results <- arrange(results, desc(AUC))
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(results, format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("HOLD_position"))
+#print(results)
+```
+
+## Further Comparisons
+
+```{r}
+# Create a list with all the model's results
+list_results <- list(results_complete_log_reg_04, results_log_reg_step_back_04, results_log_reg_step_forw_04, results_lasso_04, results_ridge_04, results_lda_04, results_qda_04, results_knn)
+# Create a list with all the model's names
+model_names <- list("Complete logistic regression", "Logistic Regression Backward", "Logistic Regression Forward", "Lasso", "Ridge", "LDA", "QDA", "KNN")
+
+# Initialize the empty matrix
+results_matrix <- matrix(NA, nrow = length(list_results), ncol = 6, dimnames = list(NULL, c("Model", "Accuracy", "Sensitivity", "Specificity", "Precision", "F1Score")))
+
+# Fill the matrix with the results
+for (i in 1:length(list_results)) {
+  results_matrix[i, "Model"] <- paste(model_names[i])
+  results_matrix[i, "Accuracy"] <- list_results[[i]]$Accuracy
+  results_matrix[i, "Sensitivity"] <- list_results[[i]]$Sensitivity
+  results_matrix[i, "Specificity"] <- list_results[[i]]$Specificity
+  results_matrix[i, "Precision"] <- list_results[[i]]$Precision
+  results_matrix[i, "F1Score"] <- list_results[[i]]$F1Score
+}
+
+# Convert table in data frame
+results_table <- as.data.frame(results_matrix, stringsAsFactors = FALSE)
+
+# Order for Sensitivity
+results_table <- results_table[order(results_table$Sensitivity, decreasing = TRUE), ]
+
+#print(results_table)
+```
+```{r echo=FALSE}
+options(xtable.comment = FALSE)
+kable(results_table, format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options=c("scale_down","HOLD_position"))
+```
+
+
+# Conclusions
+
+With the data analyzed and the predictive models developed, it is now time to delve into the findings and insights obtained from our heart disease project. This critical phase of our research allows us to assess the model's performance, evaluate the relevance of features, and draw meaningful conclusions to aid in medical decision-making. 
+
+## Conclusions about the most relevant features
+
+The relevance of certain features from a medical standpoint can often be explained by existing knowledge and research in the field of medicine. Here's an explanation of why some features are considered more relevant for predicting heart disease:
+
+*   Gender = Male: The observation that males are more prone to suffer from heart disease is consistent with well-established medical knowledge. Studies have shown that men are at a higher risk of heart disease compared to women. This higher risk is attributed to biological and hormonal differences between men and women, where estrogen in women provides some level of protection against heart disease. Additionally, lifestyle factors such as smoking, alcohol consumption, and stress might contribute to the higher risk in males.
+
+*   High Fasting Blood Sugar (>120mg/dl): Elevated fasting blood sugar levels are associated with an increased risk of heart disease. High blood sugar levels can indicate diabetes or prediabetes, both of which are significant risk factors for cardiovascular diseases. Monitoring fasting blood sugar levels is crucial for managing and preventing heart disease in individuals with diabetes or insulin resistance.
+
+*   Exercise-Induced Angina = Yes: Angina is chest pain or discomfort caused by reduced blood flow to the heart muscle due to narrowed arteries. Exercise-induced angina is a strong indicator of coronary artery disease, where the heart's blood supply is compromised during physical exertion. Detecting exercise-induced angina can help identify patients at higher risk of heart disease.
+
+*   ST_Slope = Flat: The ST segment on an electrocardiogram (ECG) represents the period between ventricular depolarization and repolarization. A flat ST segment might indicate myocardial ischemia, which means the heart muscle is not receiving enough oxygen-rich blood. ST segment changes are essential markers for diagnosing heart disease and assessing its severity.
+
+*   Oldpeak: Oldpeak refers to the ST depression induced by exercise in an ECG. ST depression during exercise is also indicative of myocardial ischemia and can be used to evaluate the extent of coronary artery disease.
+
+Furthermore is crucial to mentioned that the presence of a significant number of individuals with heart disease labeled as "ASY" suggests that heart disease may not always present with obvious or characteristic symptoms. These findings could have implications for early detection and diagnosis of heart disease, as some individuals may not seek medical attention or be aware of their condition if they do not experience typical chest pain.
+
+In summary, the most relevant features from a medical standpoint are those that align with established risk factors and diagnostic indicators of heart disease. The presence and magnitude of these features provide crucial insights for identifying individuals at risk of heart disease, enabling early detection, intervention, and appropriate medical management to reduce the risk of adverse cardiac events.
+
+## Conclusions about the results obtained by the tested models
+
+Based on the obtained results, the Lasso model appears to be the most promising due to its higher sensitivity and reasonable accuracy. However, it is essential to exercise caution and conduct further analysis. The dataset used for the study is relatively small and may not be fully representative of the broader population. It solely focuses on western countries' populations and overlooks potential cultural variations that can influence lifestyles and health outcomes, potentially impacting the model's predictions. In addition to statistical performance, the ideal model should align with domain knowledge, giving appropriate importance to relevant features related to the subject matter. Thus, it is crucial to consider both statistical metrics and expert insights when determining the most appropriate model for heart disease prediction. Additional research and validation are necessary to ensure the model's reliability and applicability in a broader context.
+
+
+
+
